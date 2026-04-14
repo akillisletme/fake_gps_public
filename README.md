@@ -1,6 +1,6 @@
 # Location Simulator — Mock GPS for Android [Open source]
 
-<img alt="Location Simulator" src="https://raw.githubusercontent.com/akillisletme/fake_gps_public/main/docs/images/market.png" />
+<img alt="Location Simulator" src="docs/images/market_update1.png" />
 
 [View Screenshots](docs/screenshots.md)
 
