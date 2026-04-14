@@ -11,9 +11,6 @@
 - **Platform:** Flutter
 - **Repository:** [github.com/akillisletme/fake_gps_public](https://github.com/akillisletme/fake_gps_public)
 
-## Genel Görüş
-
-## Teknik Görüş
 
 ---
 
