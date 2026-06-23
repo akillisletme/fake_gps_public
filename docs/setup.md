@@ -1,6 +1,6 @@
 # Setup Guide
 
-Location Simulator uses Android's mock location API. A one-time setup is required.
+Map Tools: Fake GPS & Trails uses Android's mock location API. A one-time setup is required.
 
 ---
 
@@ -17,7 +17,7 @@ Location Simulator uses Android's mock location API. A one-time setup is require
 
 1. Open **Settings → Developer Options**
 2. Find **Select mock location app**
-3. Choose **Location Simulator**
+3. Choose **Map Tools: Fake GPS & Trails**
 
 ### 3. You're ready
 

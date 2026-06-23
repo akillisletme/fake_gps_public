@@ -9,7 +9,6 @@
 ```
 Flutter (Dart)
 ├── BLoC / Cubit          — feature-scoped state management across all modules
-│   └── HydratedBloc      — automatic state persistence (favorites, routes, schedules)
 ├── Drift (SQLite ORM)    — type-safe local database with reactive streams
 ├── GetIt                 — service locator for dependency injection
 ├── GoRouter              — declarative navigation with deep link support
@@ -167,7 +166,6 @@ Splash  (RemoteConfig version check)
 |---|---|---|
 | Favorites, routes, schedules | **Drift** (SQLite) | Repository pattern, reactive `watch()` streams |
 | Theme, language, map settings | **SharedPreferences** | Accessed via service locator |
-| Simulation state across restarts | **HydratedBloc** | JSON serialization via `fromJson` / `toJson` |
 | Remote feature flags & version | **Firebase Remote Config** | Fetched on splash, cached locally |
 
 ---

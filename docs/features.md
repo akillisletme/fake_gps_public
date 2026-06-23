@@ -6,8 +6,8 @@
 |------|-------------|
 | **Fixed Location** | Tap anywhere on the map to instantly pin your location — no movement, no drift |
 | **Joystick** | Move your location in real time with an on-screen joystick |
-| **Route Simulation** | Place up to 10 waypoints and simulate traveling along a route with adjustable speed |
-| **Pro Route** | Advanced route mode with 5 different map styles and enhanced customization options |
+| **Route Simulation** | Simulate traveling along an A to B route with adjustable speed |
+| **Pro Route** | Advanced route mode supporting up to 10 waypoints with custom speeds, altitude, wait times, signal loss simulation, and multiple map styles |
 | **Human Simulation** | Natural movement within a radius — Walking, Running, Cycling, Driving, or Stationary |
 
 ---
