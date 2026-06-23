@@ -1,13 +1,14 @@
 # Features
 
-## 4 Simulation Modes
+## 5 Simulation Modes
 
 | Mode | Description |
 |------|-------------|
-| **Basic Mock** | Tap anywhere on the map to instantly set your location |
+| **Fixed Location** | Tap anywhere on the map to instantly pin your location — no movement, no drift |
 | **Joystick** | Move your location in real time with an on-screen joystick |
-| **Route Simulation** | Place waypoints and simulate traveling along a route |
-| **Human Simulation** | Natural movement within a radius (walking, cycling, driving) |
+| **Route Simulation** | Place up to 10 waypoints and simulate traveling along a route with adjustable speed |
+| **Pro Route** | Advanced route mode with 5 different map styles and enhanced customization options |
+| **Human Simulation** | Natural movement within a radius — Walking, Running, Cycling, Driving, or Stationary |
 
 ---
 
@@ -18,6 +19,41 @@
 - Undo last waypoint
 - Save and reload routes from the drawer
 - Set route duration (arrive in X minutes)
+- Adjust speed and watch your location move in real time
+
+---
+
+## Smart Shield
+
+- Automatically switches to a pre-assigned GPS profile when a specific app is opened
+- Per-app location profiles — set different fake locations for different apps
+- Works seamlessly in the background
+
+---
+
+## Photo GPS Editor
+
+- Select any photo from your gallery
+- View, edit, or add EXIF GPS coordinates to photos
+- Add a custom location name to the photo
+- Save the updated photo back to your gallery
+
+---
+
+## GPX / KML / TCX Support
+
+- Import routes from standard GPX, KML, and TCX files
+- Export your simulated routes and sessions
+- Compatible with popular mapping and fitness apps
+
+---
+
+## Map Tools (Built-in)
+
+- Real-time compass with hybrid sensor support
+- Measure distances with the built-in ruler
+- Calculate area and draw circles on the map
+- Track sun position and path anytime
 
 ---
 
@@ -39,7 +75,7 @@
 
 ## Supported Languages
 
-The app is fully translated into 14 languages. The language can be changed at any time from Settings.
+The app is fully translated into 20 languages. The language can be changed at any time from Settings.
 
 | Language | Code |
 |----------|------|
@@ -57,6 +93,12 @@ The app is fully translated into 14 languages. The language can be changed at an
 | Hindi | `hi` |
 | Indonesian | `id` |
 | Chinese (Simplified) | `zh` |
+| Chinese (Traditional) | `zh-TW` |
+| Polish | `pl` |
+| Dutch | `nl` |
+| Ukrainian | `uk` |
+| Vietnamese | `vi` |
+| Thai | `th` |
 
 ---
 
@@ -64,4 +106,6 @@ The app is fully translated into 14 languages. The language can be changed at an
 
 - Light / Dark / System theme
 - Step-by-step setup guide with real-time status checks
-- No ads, no subscriptions
+- 100% Free — No ads, no subscriptions
+- Works system-wide — all apps will see the simulated location
+- No root required
