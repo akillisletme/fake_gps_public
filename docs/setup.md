@@ -1,6 +1,7 @@
 # Setup Guide
 
-Map Tools: Fake GPS & Trails uses Android's mock location API. A one-time setup is required.
+Map Tools: Fake GPS & Tracker uses Android's mock location API. A one-time setup
+is required.
 
 ---
 
@@ -17,11 +18,18 @@ Map Tools: Fake GPS & Trails uses Android's mock location API. A one-time setup 
 
 1. Open **Settings → Developer Options**
 2. Find **Select mock location app**
-3. Choose **Map Tools: Fake GPS & Trails**
+3. Choose **Map Tools: Fake GPS & Tracker**
 
-### 3. You're ready
+### 3. Grant the location permission
 
-Open the app and pick a simulation mode. The in-app setup guide also walks through each step with real-time status checks.
+Open the app and allow location access when asked. It is used to centre the map,
+verify your setup, and — only while you are recording a walk yourself — sample
+your real GPS track.
+
+### 4. You're ready
+
+Pick a simulation mode. The in-app setup guide walks through each step with
+real-time status checks and can open the right Android settings screen for you.
 
 ---
 
@@ -29,4 +37,7 @@ Open the app and pick a simulation mode. The in-app setup guide also walks throu
 
 - No root required
 - Works system-wide — all apps will see the simulated location
-- To stop mocking, press the stop button inside the app
+- To stop mocking, press the stop button inside the app, or use the home screen
+  widget / floating widget if the app is closed
+- Recording a walk is blocked while a mock location is active, so a simulated
+  track can never be saved as a real one

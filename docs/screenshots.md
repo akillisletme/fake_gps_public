@@ -13,4 +13,4 @@
 
 ## Market Banner
 
-<img src="images/play_store.png" alt="Map Tools: Fake GPS & Trails — Google Play" />
+<img src="images/play_store.png" alt="Map Tools: Fake GPS & Tracker — Google Play" />

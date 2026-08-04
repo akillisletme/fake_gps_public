@@ -1,6 +1,12 @@
 # Architecture
 
-> **Map Tools: Fake GPS & Trails** is a production-grade Flutter application with a layered, scalable architecture built around the BLoC pattern. Every layer is designed for maintainability, testability, and separation of concerns.
+> **Map Tools: Fake GPS & Tracker** is a production Flutter application with a
+> layered, scalable architecture built around the BLoC pattern. Every layer is
+> designed for maintainability, testability and separation of concerns.
+
+> This document is a high-level technical overview of the shipped app. It is not
+> a complete source listing — internal keys, wire identifiers and billing
+> internals are intentionally left out.
 
 ---
 
@@ -14,149 +20,203 @@ Flutter (Dart)
 ├── GoRouter              — declarative navigation with deep link support
 ├── Freezed               — immutable state & data models with sealed unions
 ├── EasyLocalization      — 20-language runtime locale switching
-└── Google Maps Flutter   — map rendering, markers, polylines, area overlays
+└── Google Maps Flutter   — map rendering, markers, polylines, heatmaps
 
 Native (Kotlin / Android)
-├── MockLocationService      — ForegroundService, dual-provider GPS injection
-├── SchedulerAlarmReceiver   — BroadcastReceiver + BOOT_COMPLETED rescheduling
-├── SmartShieldService       — UsageStatsManager-based foreground app detection
-├── HomeWidgetReceiver        — AppWidget entry point for background mock activation
-├── FloatingOverlayService   — System overlay window for out-of-app control
-└── MainActivity             — MethodChannel bridge to Flutter
+├── MockLocationService          — ForegroundService, dual-provider GPS injection
+├── RecordingForegroundService   — keeps walk recording alive with the screen off
+├── SchedulerAlarmReceiver       — AlarmManager + BOOT_COMPLETED rescheduling
+├── SmartShieldMonitorService    — UsageStats-based foreground app detection
+├── HomeWidget                   — AppWidget entry point for background activation
+├── OverlayService               — system overlay window for out-of-app control
+└── MainActivity                 — MethodChannel bridge to Flutter
 ```
 
 ---
 
 ## Architectural Layers
 
-The application follows a **feature-first Clean Architecture** approach:
+The application follows a **feature-first** layout with a shared product layer:
 
 ```
 lib/
-├── core/
-│   ├── services/          — RemoteConfigService, GeocodingService, ChannelService
-│   ├── repositories/      — abstract interfaces (SavedItemsRepository, ScheduleRepository …)
-│   ├── models/            — Freezed domain models
-│   └── utils/
-├── features/
-│   ├── map/               — MapView, MapCoordinatorCubit, AppModeCubit
-│   ├── basic_mock/        — BasicMockCubit, BasicMockState
-│   ├── joystick/          — JoystickCubit, JoystickState
-│   ├── route/             — RouteCubit, RouteState
-│   ├── pro_route/         — ProRouteCubit, ProRouteState
-│   ├── human_simulation/  — HumanSimulationCubit, HumanSimulationState
-│   ├── map_tools/         — MapToolsCubit (Ruler, Area, Circle, Compass, Sun)
-│   ├── settings/          — ThemeCubit, SchedulerCubit, SmartShieldCubit
-│   ├── saved_items/       — SavedItemsCubit (Drift-backed, reactive streams)
-│   ├── photo_gps/         — PhotoGpsCubit (EXIF read/write via MethodChannel)
-│   ├── splash/            — SplashCubit (RemoteConfig version check)
-│   └── welcome/           — WelcomeCubit (onboarding & terms)
-└── injection/             — GetIt service locator setup
+├── product/                  — shared infrastructure
+│   ├── init/                 — app bootstrap, global provider tree, localization
+│   ├── db/                   — ALL persistence lives here
+│   │   ├── tables/           — Drift table definitions
+│   │   ├── repositories/     — abstract contracts + Drift implementations
+│   │   └── preferences/      — SharedPreferences facade, split into mixins
+│   ├── service/              — service locator + platform/service wrappers
+│   ├── subscription/         — billing integration (RevenueCat)
+│   ├── models/               — Freezed domain models
+│   ├── navigation/           — GoRouter routes and transitions
+│   ├── theme/                — theming and user accent colour
+│   ├── utils/                — geo maths, parsers, unit system, simplifiers
+│   └── widgets/              — shared UI building blocks
+│
+└── future/                   — feature modules
+    ├── login/                — onboarding, splash, terms
+    ├── map/                  — the map screen (mode-based, see below)
+    └── settings/             — settings tree with its own inner Navigator
 ```
+
+---
+
+## The Map Screen — Three-Layer Mode Architecture
+
+The map is the heart of the app, and its structure is the main architectural
+decision in the project:
+
+| Layer | What it selects | Owner |
+|---|---|---|
+| **AppMode** | top-level mode: FakeGPS ⇄ Tools ⇄ Tracker | `AppModeCubit` |
+| **MapMode** | FakeGPS sub-mode: fixed / joystick / route / human | `MapCoordinatorCubit` |
+| **MapToolId** | which of the 10 measurement tools is active | `MapToolsCubit` |
+
+The screen shell iterates over the registered top-level modes and asks each
+mode's **presenter** for its UI slots (FAB, info pill, portrait overlay,
+landscape rail, help content). Presenters are wired in a small registry, so
+**adding a new top-level mode is a presenter class plus one registry line** — the
+map shell itself is never touched.
+
+Each measurement tool implements a single `MapTool` contract (map taps, markers,
+polylines, result, optional live controls and point dragging), so a new tool is
+one file plus one enum entry.
+
+### Coordinator Pattern
+
+`MapCoordinatorCubit` orchestrates the simulation modes and enforces mutual
+exclusion — only one mode can be active at a time. Mode transitions are
+serialised behind a lock so that a slow cleanup can never overlap with the next
+activation, and the native service always receives clean, non-conflicting
+updates.
+
+Starting a simulation goes through a single gate that checks, in order: location
+permission → mock-location setup → usage allowance. Ordering matters: a failed
+attempt must not consume the user's daily allowance.
 
 ---
 
 ## State Management — BLoC Tree
 
-The entire application state is managed through a structured `MultiBlocProvider` hierarchy. A central **`MapCoordinatorCubit`** enforces mutual exclusion across simulation modes — only one mode can be active at a time, preventing state conflicts.
-
 ```
 EasyLocalization
 └── StateInitialize
     └── MultiBlocProvider
-        ├── ThemeCubit                   # Material You, custom color, contrast, presets
-        ├── SavedItemsCubit              # 5 Drift repositories, watch() stream subscriptions
+        ├── ThemeCubit                   # Material You, custom colour, contrast, AMOLED
+        ├── SubscriptionCubit            # subscription state
+        ├── SavedItemsCubit              # 5 Drift repositories, watch() streams
         ├── MapCoordinatorCubit          # orchestrates all simulation modes
-        ├── AppModeCubit                 # top-level mode switch (FakeGPS ⇄ Tools)
+        ├── AppModeCubit                 # FakeGPS ⇄ Tools ⇄ Tracker
         └── Builder
-            ├── BasicMockCubit           # fixed location mode
+            ├── BasicMockCubit           # fixed location
             ├── JoystickCubit            # real-time directional control
-            ├── RouteCubit               # A→B route simulation
-            ├── ProRouteCubit            # multi-waypoint with speed/altitude/signal control
-            ├── HumanSimulationCubit     # natural movement within radius
-            ├── MapToolsCubit            # measurement tools state machine
+            ├── RouteCubit               # 2–10 point route simulation
+            ├── ProRouteCubit            # per-waypoint speed / altitude / dwell
+            ├── HumanSimulationCubit     # natural movement within a radius
+            ├── MapToolsCubit            # measurement tool state machine
+            ├── RouteRecordingCubit      # real GPS track recording
             ├── WelcomeCubit
             └── SplashCubit              # RemoteConfig-driven version gate
 ```
 
-### Coordinator Pattern
-
-`MapCoordinatorCubit` holds references to all five simulation cubits and exposes a single `activateMode(SimulationMode)` method. When a mode is activated, all others are commanded to stop — ensuring the native `MockLocationService` receives clean, non-conflicting location updates.
+Module cubits are attached to the coordinator **before the first frame**, which
+closes the race window between a mode switch and native state sync.
 
 ---
 
 ## How Mock Location Works
 
-The native `MockLocationService` (Android `ForegroundService`) injects fake coordinates into **both** Android location stacks simultaneously:
+The native `MockLocationService` (Android `ForegroundService`) injects fake
+coordinates into **both** Android location stacks:
 
 | Provider | Used by |
 |---|---|
 | **FusedLocationProviderClient** | Google Maps, modern apps, Play Services |
 | **LocationManager** (GPS + Network) | Legacy apps, AOSP location stack |
 
-This dual-injection approach guarantees system-wide compatibility without root access.
+This dual-injection approach gives system-wide compatibility without root
+access. The service is the single owner of the active mock: whichever entry
+point starts it (app, widget, overlay, alarm or Smart Shield), the state lives
+in one place and the UI re-syncs from it.
 
 ---
 
-## Native ↔ Flutter Communication (MethodChannel)
+## Native ↔ Flutter Communication
 
-All platform-specific operations are bridged via `MethodChannel`:
+All platform-specific work is bridged over `MethodChannel`, with a thin Dart
+wrapper per channel so platform calls never leak into the UI layer:
 
-| Channel | Direction | Purpose |
+| Bridge | Direction | Purpose |
 |---|---|---|
-| `mock_location_channel` | Flutter → Native | Start / stop / update mock GPS |
-| `scheduler_channel` | Flutter → Native | Set / cancel `AlarmManager` triggers |
-| `smart_shield_channel` | Flutter → Native | Register per-app GPS profiles via `UsageStatsManager` |
-| `photo_gps_channel` | Flutter → Native | Read / write EXIF metadata on gallery photos |
-| `widget_channel` | Native → Flutter | Home widget & floating overlay activation |
+| Mock location | Flutter → Native | start / update / stop mock GPS, read current status |
+| Scheduler | Flutter → Native | set and cancel `AlarmManager` triggers |
+| Smart Shield | Flutter → Native | usage-access check, start/stop the monitor |
+| Walk recording | Flutter → Native | start / pause / stop the recording service |
+| Notifications | Flutter → Native | native notifications shown while Flutter is paused |
+| System settings | Flutter → Native | open the relevant Android settings screens |
+| Route import | Native → Flutter | hand over a GPX/KML/TCX file opened from outside |
+
+The walk-recording bridge is deliberately **advisory**: if the native call
+fails, the failure is swallowed and recording continues. A notification problem
+must never cost the user their track.
 
 ---
 
 ## Background & Out-of-App Entry Points
 
-A key architectural challenge was enabling mock location activation **without the app being open**. Four independent entry points handle this:
+A key architectural challenge was activating mock location **without the app
+being open**. Four independent entry points handle this:
 
 ```
-Home Widget (AppWidget)
-  └── HomeWidgetReceiver → MockLocationService.start(profile)
-
-Floating Overlay (System Window)
-  └── FloatingOverlayService → MockLocationService.start(profile)
-
-Scheduled Alarm
-  └── AlarmManager.setExactAndAllowWhileIdle
-        └── SchedulerAlarmReceiver → MockLocationService.start(profile)
-
-Smart Shield (App Detection)
-  └── SmartShieldService (UsageStatsManager polling)
-        └── Foreground app matches profile → MockLocationService.switchProfile(profile)
+Home Widget (AppWidget)          → MockLocationService.start(slot)
+Floating Overlay (system window) → MockLocationService.start(slot)
+Scheduled Alarm (AlarmManager)   → SchedulerAlarmReceiver → MockLocationService.start()
+Smart Shield (UsageStats poll)   → foreground app matches a rule → start / stop
 ```
 
-- Android 12+ uses `setExactAndAllowWhileIdle` with FGS start exemption
-- `BOOT_COMPLETED` receiver reschedules all persisted alarms after device reboot
+- The alarm receiver runs **without a Flutter engine** and reschedules recurring
+  alarms itself; a `BOOT_COMPLETED` receiver restores them after a reboot
+- Smart Shield tracks whether it started the current mock, so it can stop its own
+  session while **never** killing a mock the user started manually
+
+---
+
+## Walk Recording
+
+Recording real GPS is a separate lifecycle from playing back a simulation:
+
+- A foreground service plus a partial wake lock keeps sampling alive with the
+  screen off; the location stream itself stays in Dart
+- Points are flushed to a draft table on a balanced schedule, so a crash mid-walk
+  leaves a recoverable draft rather than nothing
+- Pause time is compressed out of the timestamps, so it never inflates speed
+- Recording is blocked while a mock is active — otherwise the "real" track would
+  be the fake one
+- The drawn track is split into a **settled** and a **live** polyline. The
+  settled part is value-equal between frames, so it is not re-serialised to the
+  platform channel on every sample — this keeps channel traffic flat on long
+  recordings instead of growing with track length
+- The playback path reuses the existing advanced-route engine
 
 ---
 
 ## Navigation Flow
 
-Declarative routing via **GoRouter** with deep link support (`fakegps://` scheme):
+Declarative routing via **GoRouter**, with deep link support (`fakegps://`):
 
 ```
 Splash  (RemoteConfig version check)
   ├── updateRequired  → UpdateRequiredView   (changelog from Firestore, Play Store CTA)
-  ├── !termsAccepted  → LanguageSelectionView (initial setup)
-  │       └── WelcomeView → MapView
+  ├── first run       → Onboarding → Setup Guide → MapView
   └── returning user  → MapView
-                            ├── FavoritesDrawer
-                            └── SettingsView
-                                ├── ThemeView
-                                ├── LanguageSelectionView
-                                ├── SchedulerView
-                                ├── SmartShieldView
-                                ├── PhotoGpsView
-                                ├── SetupGuideView → MapControlsView
-                                └── AboutView  (legal documents)
+                          ├── FavoritesDrawer
+                          └── SettingsView (inner Navigator)
 ```
+
+Most settings sub-pages are pushed onto the settings screen's **inner
+Navigator** rather than the global router, which keeps the settings background
+layer stationary while pages slide over it.
 
 ---
 
@@ -164,47 +224,33 @@ Splash  (RemoteConfig version check)
 
 | Data | Storage | Strategy |
 |---|---|---|
-| Favorites, routes, schedules | **Drift** (SQLite) | Repository pattern, reactive `watch()` streams |
-| Theme, language, map settings | **SharedPreferences** | Accessed via service locator |
-| Remote feature flags & version | **Firebase Remote Config** | Fetched on splash, cached locally |
+| Favourites, routes, recordings, schedules | **Drift** (SQLite) | Repository pattern, reactive `watch()` streams, versioned migrations |
+| Theme, language, units, map settings | **SharedPreferences** | Read through a mixin-composed facade |
+| Data the native side also reads | **SharedPreferences** | Deliberate: native services cannot read the SQLite layer |
+| Remote flags & minimum version | **Firebase Remote Config** | Fetched on splash, cached locally |
+
+List-shaped fields (waypoints, repeat days) are stored as JSON text columns, and
+every record is an independent row — one corrupt record cannot take the rest of
+the collection with it.
 
 ---
 
-## Simulation Modes
+## Units System
 
-| Mode | Cubit | Key Behavior |
-|---|---|---|
-| Fixed Location | `BasicMockCubit` | Instant pin from map tap, search, coordinates, or favorites |
-| Joystick | `JoystickCubit` | Real-time directional offset at configurable speed |
-| Route | `RouteCubit` | A→B interpolation at fixed 50 km/h; pause / resume |
-| Pro Route | `ProRouteCubit` | Up to 10 waypoints; per-waypoint speed, altitude, wait, signal loss; loop & queue modes |
-| Human Simulation | `HumanSimulationCubit` | Random walk within radius; behavior profiles (walk / run / cycle / drive / idle) |
-
----
-
-## Map Tools Module
-
-`MapToolsCubit` acts as a **state machine** for the Tools mode, managing active tool transitions and accumulated drawing state:
-
-| Tool | Function |
-|---|---|
-| Ruler | Multi-point cumulative distance |
-| Area | Polygon area calculation (m² / km²) |
-| Circle | Center + radius; computes circumference & area |
-| Cooldown | 2-point distance → safe travel time (Pokémon GO) |
-| Compass | Live magnetometer heading; calibration accuracy warnings |
-| Sun | Sunrise / sunset / day length for any map point (NOAA algorithm) |
-| Sun Path *(Pro)* | Day-scrubber slider; animated solar azimuth ray |
+A dedicated unit layer supports **metric, imperial and nautical** systems plus a
+set of area units. The formatter is a **pure function** that takes the preference
+as a parameter, so it is testable without a widget tree, and a small environment
+reader lets the map tools (which have no `BuildContext`) read the current
+preference. Changing the unit re-renders live tool results immediately.
 
 ---
 
 ## Firebase Infrastructure
 
-The app runs three Firebase services in production, each serving a distinct purpose in the application lifecycle:
-
 ### Firebase Crashlytics — Error Monitoring
 
-`firebase_crashlytics` is active in **all production builds**. Uncaught exceptions and Flutter framework errors are automatically captured and reported:
+Active in production builds; disabled in debug. Uncaught Dart exceptions,
+Flutter framework errors and native Kotlin crashes are all captured.
 
 ```dart
 // main.dart
@@ -216,36 +262,40 @@ PlatformDispatcher.instance.onError = (error, stack) {
 };
 ```
 
-- Fatal and non-fatal errors are tracked separately
-- Custom keys are attached to crashes (e.g. active simulation mode, OS version)
-- Native Kotlin crashes are captured automatically via the Crashlytics Android SDK
-- Enables rapid identification and resolution of production issues
+### Firebase Remote Config — Version Gate & Feature Flags
 
-### Firebase Remote Config — Feature Flags & Version Gate
-
-`firebase_remote_config` drives the **Splash screen version check** and controls feature rollout without an app update:
-
-| Key | Purpose |
-|---|---|
-| `min_version` | Minimum required app version — triggers forced update screen |
-| `latest_version` | Current latest version shown in update prompt |
-| `changelog_{languageCode}` | Per-language release notes fetched from Remote Config |
-
-`SplashCubit` fetches and caches Remote Config values on every cold start. If `min_version > current_version`, the user is routed to `UpdateRequiredView` and blocked from proceeding until they update via Play Store.
+Drives the splash version check and lets configuration change without an app
+update. If the minimum required version is above the installed one, the user is
+routed to the update screen and blocked until they update via Play Store.
 
 ### Cloud Firestore — Dynamic Content
 
-`cloud_firestore` is used to serve **app changelog content** dynamically:
+Serves per-language changelog content, so release notes can be updated
+server-side without shipping a new build.
 
-- `FirestoreService.getAppChangelog(languageCode)` fetches release notes in the user's active language
-- Displayed on the `UpdateRequiredView` with copy and Google Translate actions
-- Content can be updated server-side without a new app release
+---
+
+## Testing
+
+Roughly **400 tests** cover everything that does not need a device: cubits,
+Drift repositories and migrations, the measurement tools, geo maths, the unit
+formatter, translation parity across all 20 languages, and selected widget
+layouts.
+
+Testability patterns used throughout:
+
+- Cubits take the outside world through the constructor (location stream,
+  permissions, clock, platform channels), so tests inject fakes
+- Pure calculation layers are kept separate from UI and tested directly
+- Widget tests run without translations loaded, so keys render as their own
+  names — conveniently the worst case for layout overflow
+- Narrow-layout regressions are pinned with fixed-width widget tests
 
 ---
 
 ## Flutter Dependencies
 
-> App version: **2.1.0+59** · SDK: `^3.10.7`
+> App version: **2.4.0+68** · Dart SDK: `^3.10.7`
 
 ### Production Dependencies
 
@@ -266,12 +316,12 @@ PlatformDispatcher.instance.onError = (error, stack) {
 | | firebase_remote_config | ^6.1.4 |
 | | firebase_crashlytics | ^5.0.7 |
 | | cloud_firestore | ^6.0.2 |
+| **Billing** | purchases_flutter | ^10.4.1 |
 | **Localization** | easy_localization | ^3.0.7 |
 | **Storage** | shared_preferences | ^2.5.4 |
 | | drift | ^2.28.0 |
 | | sqlite3_flutter_libs | 0.5.32 |
 | | path_provider | ^2.1.5 |
-| **Theming** | dynamic_color | ^1.7.0 |
 | **Connectivity** | connectivity_plus | ^6.1.0 |
 | **Photo GPS Editor** | image_picker | ^1.1.2 |
 | | native_exif | ^0.6.2 |
@@ -280,7 +330,8 @@ PlatformDispatcher.instance.onError = (error, stack) {
 | | xml | ^6.5.0 |
 | **Smart Shield** | installed_apps | ^1.6.0 |
 | **UI** | lottie | ^3.3.1 |
-| | font_awesome_flutter | ^10.12.0 |
+| | font_awesome_flutter | ^11.0.0 |
+| | google_fonts | ^8.1.0 |
 | **Utils** | url_launcher | ^6.3.1 |
 | | share_plus | ^12.0.1 |
 | | uuid | ^4.5.3 |
@@ -295,6 +346,7 @@ PlatformDispatcher.instance.onError = (error, stack) {
 | **Testing** | bloc_test | ^10.0.0 |
 | | mocktail | ^1.0.4 |
 | | fake_async | ^1.3.1 |
+| | sqlite3 | ^2.4.0 |
 | **Code Generation** | build_runner | ^2.7.0 |
 | | freezed | ^3.0.0 |
 | | json_serializable | ^6.9.4 |
